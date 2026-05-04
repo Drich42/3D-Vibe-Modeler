@@ -4,38 +4,51 @@ export function parsePromptToJSON(prompt: string): CADModelSpec {
   const lowerPrompt = prompt.toLowerCase();
   
   const spec: CADModelSpec = {
-    units: 'mm',
-    base_object: {
+    version: '1.0',
+    shapes: [{
+      id: 'base',
       type: 'cube',
-      width: 50,
-      depth: 50,
-      height: 50
-    }
+      size: [50, 50, 50],
+      position: [0, 0, 0],
+      operation: 'add'
+    }]
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const baseShape = spec.shapes[0] as any;
+
   if (lowerPrompt.includes('cube')) {
-    spec.base_object.type = 'cube';
+    baseShape.type = 'cube';
     const match = lowerPrompt.match(/(\d+)\s*(mm|cm)/);
     if (match) {
       const size = parseInt(match[1]);
-      spec.base_object.width = size;
-      spec.base_object.depth = size;
-      spec.base_object.height = size;
-      spec.units = match[2] as 'mm' | 'cm';
+      baseShape.size = [size, size, size];
     }
   } else if (lowerPrompt.includes('sphere')) {
-    spec.base_object.type = 'sphere';
+    baseShape.type = 'sphere';
     const match = lowerPrompt.match(/(\d+)\s*(mm|cm)/);
     if (match) {
-      spec.base_object.diameter = parseInt(match[1]);
-      spec.units = match[2] as 'mm' | 'cm';
+      baseShape.radius = parseInt(match[1]) / 2;
     } else {
-        spec.base_object.diameter = 50;
+      baseShape.radius = 25;
     }
   } else if (lowerPrompt.includes('cylinder')) {
-    spec.base_object.type = 'cylinder';
-    spec.base_object.diameter = 50;
-    spec.base_object.height = 100;
+    baseShape.type = 'cylinder';
+    baseShape.radius = 25;
+    baseShape.height = 100;
+  }
+
+  // Handle boolean subtract (mocked)
+  if (lowerPrompt.includes('hole')) {
+    spec.shapes.push({
+      id: 'hole-1',
+      type: 'cylinder',
+      radius: 10,
+      height: 200,
+      position: [0, 0, 0],
+      operation: 'subtract'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as unknown as any);
   }
 
   return spec;

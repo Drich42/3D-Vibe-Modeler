@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Engine, Scene } from 'react-babylonjs';
-import { Vector3, Color3 } from '@babylonjs/core';
+import { Vector3, Color3, Mesh } from '@babylonjs/core';
 import type { Scene as BabylonScene } from '@babylonjs/core';
 import { CADModelSpec } from '../types/cad';
 import { exportSceneToSTL } from '../utils/exporter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { generateGeometry } from '../lib/csg_engine';
+import { jscadToBabylon } from '../utils/jscadToBabylon';
 
 interface ViewportProps {
   modelSpec: CADModelSpec | null;
@@ -15,6 +17,7 @@ interface ViewportProps {
 
 export function Viewport({ modelSpec }: ViewportProps) {
   const sceneRef = useRef<BabylonScene | null>(null);
+  const meshRef = useRef<Mesh | null>(null);
 
   const handleExport = () => {
     if (sceneRef.current) {
@@ -22,47 +25,17 @@ export function Viewport({ modelSpec }: ViewportProps) {
     }
   };
 
-  const renderModel = () => {
-    if (!modelSpec) return null;
+  useEffect(() => {
+    if (!modelSpec || !meshRef.current) return;
 
-    const { base_object } = modelSpec;
-    
-    // Convert units visually if needed, but keeping it simple for 1 unit = 1mm
-    // Scaling down slightly so 50mm doesn't overflow screen if camera is at default
-    const scale = 0.05; 
-
-    if (base_object.type === 'cube') {
-      const w = (base_object.width || 50) * scale;
-      const d = (base_object.depth || 50) * scale;
-      const h = (base_object.height || 50) * scale;
-      return (
-        <box name="base-cube" width={w} depth={d} height={h}>
-          <standardMaterial name="mat" diffuseColor={Color3.FromHexString("#0070f3")} />
-        </box>
-      );
+    try {
+      const jscadGeometry = generateGeometry(modelSpec);
+      const vertexData = jscadToBabylon(jscadGeometry);
+      vertexData.applyToMesh(meshRef.current, true);
+    } catch (e) {
+      console.error('Failed to generate CSG geometry:', e);
     }
-
-    if (base_object.type === 'sphere') {
-      const diameter = (base_object.diameter || 50) * scale;
-      return (
-        <sphere name="base-sphere" diameter={diameter} segments={32}>
-          <standardMaterial name="mat" diffuseColor={Color3.FromHexString("#0070f3")} />
-        </sphere>
-      );
-    }
-    
-    if (base_object.type === 'cylinder') {
-      const diameter = (base_object.diameter || 50) * scale;
-      const height = (base_object.height || 50) * scale;
-      return (
-        <cylinder name="base-cylinder" diameter={diameter} height={height} tessellation={32}>
-          <standardMaterial name="mat" diffuseColor={Color3.FromHexString("#0070f3")} />
-        </cylinder>
-      );
-    }
-
-    return null;
-  };
+  }, [modelSpec]);
 
   return (
     <div className="flex flex-col h-full relative">
@@ -76,13 +49,16 @@ export function Viewport({ modelSpec }: ViewportProps) {
               name="camera1"
               alpha={Math.PI / 4}
               beta={Math.PI / 3}
-              radius={10}
+              radius={100}
               target={Vector3.Zero()}
               wheelPrecision={50}
             />
             <hemisphericLight name="light1" intensity={0.7} direction={new Vector3(0, 1, 0)} />
             <directionalLight name="light2" intensity={0.5} direction={new Vector3(-1, -2, -1)} />
-            {renderModel()}
+            
+            <mesh name="csg-mesh" ref={meshRef}>
+              <standardMaterial name="mat" diffuseColor={Color3.FromHexString("#0070f3")} backFaceCulling={false} />
+            </mesh>
           </Scene>
         </Engine>
       </Card>

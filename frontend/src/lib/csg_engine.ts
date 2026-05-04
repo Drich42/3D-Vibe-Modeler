@@ -1,4 +1,4 @@
-import type { CADModelSpec, Shape } from './types/cad.js';
+import type { CADModelSpec } from '../types/cad';
 import modeling from '@jscad/modeling';
 
 const { booleans, primitives, transforms } = modeling;
@@ -6,15 +6,18 @@ const { union, subtract } = booleans;
 const { cuboid, sphere, cylinder } = primitives;
 const { translate, rotate } = transforms;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function generateGeometry(spec: CADModelSpec): any {
   if (!spec || !spec.shapes || spec.shapes.length === 0) {
     throw new Error('Invalid or empty CADModelSpec');
   }
 
   // The first shape is our base
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let currentGeometry: any = null;
 
   for (const shape of spec.shapes) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let geom: any;
 
     switch (shape.type) {
