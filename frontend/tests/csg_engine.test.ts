@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateGeometry } from '../src/csg_engine.js';
-import type { CADModelSpec } from '../src/types/cad.js';
+import { generateGeometry } from '../src/lib/csg_engine';
+import type { CADModelSpec } from '../src/types/cad';
 
 describe('CSG Engine', () => {
   it('should generate a simple cube', () => {

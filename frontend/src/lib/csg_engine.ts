@@ -1,4 +1,4 @@
-import type { CADModelSpec, Shape } from './types/cad.js';
+import type { CADModelSpec } from '../types/cad';
 import modeling from '@jscad/modeling';
 
 const { booleans, primitives, transforms } = modeling;
@@ -6,15 +6,18 @@ const { union, subtract } = booleans;
 const { cuboid, sphere, cylinder } = primitives;
 const { translate, rotate } = transforms;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function generateGeometry(spec: CADModelSpec): any {
   if (!spec || !spec.shapes || spec.shapes.length === 0) {
     throw new Error('Invalid or empty CADModelSpec');
   }
 
   // The first shape is our base
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let currentGeometry: any = null;
 
   for (const shape of spec.shapes) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let geom: any;
 
     switch (shape.type) {
@@ -31,10 +34,10 @@ export function generateGeometry(spec: CADModelSpec): any {
         throw new Error(`Unsupported shape type`);
     }
 
-    // Apply rotation if any (assuming degrees for simplicity in spec, converting to radians if needed. JSCAD takes radians)
-    // Actually, let's assume the spec provides radians for now. Or we can convert. Let's assume radians for `rotation` array [x,y,z].
+    // Apply rotation if any (assuming degrees for simplicity in spec, converting to radians)
     if (shape.rotation) {
-      geom = rotate(shape.rotation, geom);
+      const radians = shape.rotation.map(deg => (deg * Math.PI) / 180) as [number, number, number];
+      geom = rotate(radians, geom);
     }
 
     // Apply translation
