@@ -17,7 +17,7 @@ export default function Home() {
             Text-to-Primitive modeling using an intermediate JSON specification.
           </p>
         </div>
-        <PromptInput onGenerate={(spec) => setModelSpec(spec)} />
+        <PromptInput onGenerate={(spec) => setModelSpec(spec)} currentSpec={modelSpec} />
 
         {modelSpec && (
           <div className="bg-muted p-4 rounded-lg overflow-auto max-h-[300px]">

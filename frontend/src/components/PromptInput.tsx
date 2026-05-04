@@ -5,28 +5,48 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { CADModelSpec } from '../types/cad';
-import { parsePromptToJSON } from '../utils/parser';
+import { useToast } from '@/hooks/use-toast';
 
 interface PromptInputProps {
   onGenerate: (spec: CADModelSpec) => void;
+  currentSpec?: CADModelSpec | null;
 }
 
-export function PromptInput({ onGenerate }: PromptInputProps) {
+export function PromptInput({ onGenerate, currentSpec }: PromptInputProps) {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
 
     setIsGenerating(true);
 
-    // Simulate API call to LLM
-    setTimeout(() => {
-      const spec = parsePromptToJSON(prompt);
-      onGenerate(spec);
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, currentSpec }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate model');
+      }
+
+      onGenerate(data.spec);
+      setPrompt('');
+    } catch (error: any) {
+      toast({
+        title: "Generation Failed",
+        description: error.message || "An unexpected error occurred while communicating with the AI.",
+        variant: "destructive",
+      });
+    } finally {
       setIsGenerating(false);
-    }, 500);
+    }
   };
 
   return (
