@@ -12,10 +12,11 @@ import { useEffect } from 'react';
 
 interface PromptInputProps {
   onGenerate: (spec: CADModelSpec) => void;
+  onClear?: () => void;
   currentSpec?: CADModelSpec | null;
 }
 
-export function PromptInput({ onGenerate, currentSpec }: PromptInputProps) {
+export function PromptInput({ onGenerate, onClear, currentSpec }: PromptInputProps) {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
@@ -103,11 +104,18 @@ export function PromptInput({ onGenerate, currentSpec }: PromptInputProps) {
             </div>
           )}
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <span className="text-sm text-muted-foreground">MVP Phase 1: Try cubes and spheres!</span>
-          <Button type="submit" disabled={isGenerating || !prompt.trim()} data-testid="generate-btn">
-            {isGenerating ? 'Generating...' : 'Generate 3D Model'}
-          </Button>
+        <CardFooter className="flex justify-between items-center gap-4">
+          <span className="text-sm text-muted-foreground hidden sm:inline">MVP Phase 1: Try cubes and spheres!</span>
+          <div className="flex gap-2 w-full sm:w-auto justify-end">
+            {currentSpec && onClear && (
+              <Button type="button" variant="outline" onClick={onClear} disabled={isGenerating}>
+                Clear
+              </Button>
+            )}
+            <Button type="submit" disabled={isGenerating || !prompt.trim()} data-testid="generate-btn">
+              {isGenerating ? 'Generating...' : 'Generate 3D Model'}
+            </Button>
+          </div>
         </CardFooter>
       </form>
     </Card>

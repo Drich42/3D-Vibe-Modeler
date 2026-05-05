@@ -57,13 +57,17 @@ export function Viewport({ modelSpec }: ViewportProps) {
       ]);
       scaleUp.setEasingFunction(ease);
 
-      // 1. Scale down
-      scene.beginDirectAnimation(mesh, [scaleDown], 0, 15, false, 1, () => {
-        // 2. Apply new geometry when mesh is invisible/tiny
+      if (mesh.getTotalVertices() === 0) {
+        // Initial render: no vertices yet. Apply immediately and just pop in.
         vertexData.applyToMesh(mesh, true);
-        // 3. Scale back up
         scene.beginDirectAnimation(mesh, [scaleUp], 0, 25, false, 1);
-      });
+      } else {
+        // Subsequent render: pop out, apply, pop in
+        scene.beginDirectAnimation(mesh, [scaleDown], 0, 15, false, 1, () => {
+          vertexData.applyToMesh(mesh, true);
+          scene.beginDirectAnimation(mesh, [scaleUp], 0, 25, false, 1);
+        });
+      }
 
     } catch (e) {
       console.error('Failed to generate CSG geometry:', e);
