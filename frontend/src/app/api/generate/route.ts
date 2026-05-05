@@ -10,32 +10,17 @@ const ShapeTypeSchema = z.enum(['cube', 'sphere', 'cylinder']);
 
 const BaseShapeSchema = z.object({
   id: z.string(),
-  position: z.tuple([z.number(), z.number(), z.number()]),
-  rotation: z.tuple([z.number(), z.number(), z.number()]).optional(),
+  position: z.array(z.number()),
+  rotation: z.array(z.number()).nullable(),
   operation: OperationSchema,
 });
 
-const CubeShapeSchema = BaseShapeSchema.extend({
-  type: z.literal('cube'),
-  size: z.tuple([z.number(), z.number(), z.number()]),
+const ShapeSchema = BaseShapeSchema.extend({
+  type: z.enum(['cube', 'sphere', 'cylinder']),
+  size: z.array(z.number()).nullable(),
+  radius: z.number().nullable(),
+  height: z.number().nullable(),
 });
-
-const SphereShapeSchema = BaseShapeSchema.extend({
-  type: z.literal('sphere'),
-  radius: z.number(),
-});
-
-const CylinderShapeSchema = BaseShapeSchema.extend({
-  type: z.literal('cylinder'),
-  radius: z.number(),
-  height: z.number(),
-});
-
-const ShapeSchema = z.discriminatedUnion('type', [
-  CubeShapeSchema,
-  SphereShapeSchema,
-  CylinderShapeSchema,
-]);
 
 const CADModelSpecSchema = z.object({
   version: z.string(),
