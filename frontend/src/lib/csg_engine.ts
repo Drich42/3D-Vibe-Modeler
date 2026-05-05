@@ -34,10 +34,10 @@ export function generateGeometry(spec: CADModelSpec): any {
         throw new Error(`Unsupported shape type`);
     }
 
-    // Apply rotation if any (assuming degrees for simplicity in spec, converting to radians if needed. JSCAD takes radians)
-    // Actually, let's assume the spec provides radians for now. Or we can convert. Let's assume radians for `rotation` array [x,y,z].
+    // Apply rotation if any (assuming degrees for simplicity in spec, converting to radians)
     if (shape.rotation) {
-      geom = rotate(shape.rotation, geom);
+      const radians = shape.rotation.map(deg => (deg * Math.PI) / 180) as [number, number, number];
+      geom = rotate(radians, geom);
     }
 
     // Apply translation
