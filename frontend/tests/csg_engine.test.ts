@@ -102,4 +102,25 @@ describe('CSG Engine', () => {
 
     expect(() => generateGeometry(spec)).toThrow('Invalid or empty CADModelSpec');
   });
+
+  it('should generate an extrusion from an SVG path', () => {
+    const spec: CADModelSpec = {
+      version: '1.0',
+      shapes: [
+        {
+          id: 'ext1',
+          type: 'extrusion',
+          // Simple 10x10 square path
+          path: 'M 0 0 L 10 0 L 10 10 L 0 10 Z',
+          depth: 5,
+          position: [0, 0, 0],
+          operation: 'add',
+        },
+      ],
+    };
+
+    const geometry = generateGeometry(spec);
+    expect(geometry).toBeDefined();
+    expect(geometry.polygons.length).toBeGreaterThan(0);
+  });
 });
