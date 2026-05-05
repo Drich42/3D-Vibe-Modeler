@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Engine, Scene } from 'react-babylonjs';
-import { Vector3, Mesh, Color4, Color3, Animation, CubicEase, EasingFunction, StandardMaterial } from '@babylonjs/core';
+import { Vector3, Mesh, Color4, Color3, Animation, CubicEase, EasingFunction, StandardMaterial, AxesViewer } from '@babylonjs/core';
 import type { Scene as BabylonScene, PBRMaterial } from '@babylonjs/core';
 import { CADModelSpec, Shape } from '../types/cad';
 import { exportSceneToSTL } from '../utils/exporter';
@@ -222,6 +222,7 @@ export function Viewport({ modelSpec }: ViewportProps) {
               if (meshRef.current) {
                 meshRef.current.material = createFilamentMaterial('filamentMat', filament, e.scene);
               }
+              new AxesViewer(e.scene, 50);
               setSceneReady(true);
             }}
           >
