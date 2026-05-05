@@ -2,9 +2,9 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Engine, Scene } from 'react-babylonjs';
-import { Vector3, Mesh, Color4, Color3, Animation, CubicEase, EasingFunction } from '@babylonjs/core';
+import { Vector3, Mesh, Color4, Color3, Animation, CubicEase, EasingFunction, StandardMaterial } from '@babylonjs/core';
 import type { Scene as BabylonScene, PBRMaterial } from '@babylonjs/core';
-import { CADModelSpec } from '../types/cad';
+import { CADModelSpec, Shape } from '../types/cad';
 import { exportSceneToSTL } from '../utils/exporter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { generateGeometry } from '../lib/csg_engine';
 import { jscadToBabylon } from '../utils/jscadToBabylon';
 import { createFilamentMaterial, FilamentType } from '../utils/materials';
+import deepEqual from 'fast-deep-equal';
 
 interface ViewportProps {
   modelSpec: CADModelSpec | null;
@@ -20,6 +21,10 @@ interface ViewportProps {
 export function Viewport({ modelSpec }: ViewportProps) {
   const sceneRef = useRef<BabylonScene | null>(null);
   const meshRef = useRef<Mesh | null>(null);
+  const prevSpecRef = useRef<CADModelSpec | null>(null);
+  const diffMeshRef = useRef<Mesh | null>(null);
+  const diffTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [sceneReady, setSceneReady] = useState(false);
   const [filament, setFilament] = useState<FilamentType>('matte-pla');
 
   const handleExport = () => {
@@ -28,17 +33,98 @@ export function Viewport({ modelSpec }: ViewportProps) {
     }
   };
 
+  const clearDiffMesh = () => {
+    if (diffTimeoutRef.current) {
+      clearTimeout(diffTimeoutRef.current);
+      diffTimeoutRef.current = null;
+    }
+    if (diffMeshRef.current) {
+      diffMeshRef.current.dispose();
+      diffMeshRef.current = null;
+    }
+  };
+
   useEffect(() => {
-    if (!modelSpec || !meshRef.current || !sceneRef.current) return;
+    if (!modelSpec || !meshRef.current || !sceneRef.current || !sceneReady) return;
 
     const mesh = meshRef.current;
     const scene = sceneRef.current;
 
-    try {
-      const jscadGeometry = generateGeometry(modelSpec);
-      const vertexData = jscadToBabylon(jscadGeometry);
+    const currentShapes = modelSpec.shapes || [];
+    const prevShapes = prevSpecRef.current?.shapes || [];
 
-      // Create a smooth scaling transition (Pop out, apply new geometry, pop in)
+    // Find the shape that changed (added, modified, or removed)
+    let diffShape: Shape | null = null;
+    let diffType: 'add' | 'remove' | 'modify' | null = null;
+
+    if (currentShapes.length > prevShapes.length) {
+       diffShape = currentShapes[currentShapes.length - 1];
+       diffType = 'add';
+    } else if (currentShapes.length < prevShapes.length) {
+       // Find the removed shape by checking what's missing
+       diffShape = prevShapes.find(p => !currentShapes.some(c => c.id === p.id)) || null;
+       diffType = 'remove';
+    } else {
+       // Length is the same, find the modified shape
+       for (let i = 0; i < currentShapes.length; i++) {
+         if (!deepEqual(currentShapes[i], prevShapes[i])) {
+           diffShape = currentShapes[i];
+           diffType = 'modify';
+           break;
+         }
+       }
+    }
+
+    prevSpecRef.current = modelSpec;
+
+    try {
+      // Diff Visualization Phase
+      if (diffShape && diffType && mesh.getTotalVertices() > 0) {
+        clearDiffMesh();
+
+        // Generate isolated geometry for the changed shape
+        // For a subtract/removed shape, we MUST force it to 'add' so the CSG engine can build it standalone.
+        const standaloneShape = { ...diffShape, operation: 'add' as const };
+        const isolatedSpec: CADModelSpec = { version: '1.0', shapes: [standaloneShape] };
+
+        try {
+            const isolatedGeom = generateGeometry(isolatedSpec);
+            const isolatedVertexData = jscadToBabylon(isolatedGeom);
+
+            const hologram = new Mesh('diff-hologram', scene);
+            isolatedVertexData.applyToMesh(hologram, true);
+
+            const glowMat = new StandardMaterial('glow-mat', scene);
+
+            if (diffType === 'remove' || diffShape.operation === 'subtract') {
+                glowMat.emissiveColor = new Color3(1, 0, 0); // Red for removed/subtracted
+            } else if (diffType === 'modify') {
+                glowMat.emissiveColor = new Color3(1, 1, 0); // Yellow for modify
+            } else {
+                glowMat.emissiveColor = new Color3(0, 1, 0); // Green for add
+            }
+
+            glowMat.alpha = 0.6;
+            glowMat.disableLighting = true;
+            hologram.material = glowMat;
+
+            diffMeshRef.current = hologram;
+        } catch (e) {
+            console.warn("Failed to generate isolated diff mesh", e);
+        }
+      }
+
+      const applyFinalGeometry = () => {
+        let jscadGeometry;
+        try {
+            jscadGeometry = generateGeometry(modelSpec);
+        } catch (e) {
+            console.error('Failed to generate final CSG geometry:', e);
+            return;
+        }
+        const vertexData = jscadToBabylon(jscadGeometry);
+
+        // Create a smooth scaling transition (Pop out, apply new geometry, pop in)
       const frameRate = 60;
       const ease = new CubicEase();
       ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
@@ -57,18 +143,40 @@ export function Viewport({ modelSpec }: ViewportProps) {
       ]);
       scaleUp.setEasingFunction(ease);
 
-      // 1. Scale down
-      scene.beginDirectAnimation(mesh, [scaleDown], 0, 15, false, 1, () => {
-        // 2. Apply new geometry when mesh is invisible/tiny
-        vertexData.applyToMesh(mesh, true);
-        // 3. Scale back up
-        scene.beginDirectAnimation(mesh, [scaleUp], 0, 25, false, 1);
-      });
+        if (mesh.getTotalVertices() === 0) {
+          // Initial render: apply immediately without animation to avoid scale timing bugs
+          vertexData.applyToMesh(mesh, true);
+          mesh.scaling = new Vector3(1, 1, 1);
+        } else {
+          // Subsequent render: pop out, apply, pop in
+          scene.beginDirectAnimation(mesh, [scaleDown], 0, 15, false, 1, () => {
+            vertexData.applyToMesh(mesh, true);
+            scene.beginDirectAnimation(mesh, [scaleUp], 0, 25, false, 1);
+          });
+        }
+      };
+
+      if (diffMeshRef.current) {
+        // Hold visualization for 1 second, then clear and apply final
+        diffTimeoutRef.current = setTimeout(() => {
+          clearDiffMesh();
+          applyFinalGeometry();
+        }, 1000);
+      } else {
+        applyFinalGeometry();
+      }
 
     } catch (e) {
-      console.error('Failed to generate CSG geometry:', e);
+      console.error('Unhandled error in Viewport effect:', e);
     }
-  }, [modelSpec]);
+
+    return () => {
+       // Cleanup timeout if effect re-runs quickly
+       if (diffTimeoutRef.current) {
+          clearTimeout(diffTimeoutRef.current);
+       }
+    };
+  }, [modelSpec, sceneReady]);
 
   // Update material when filament type changes
   useEffect(() => {
@@ -115,6 +223,7 @@ export function Viewport({ modelSpec }: ViewportProps) {
               if (meshRef.current) {
                 meshRef.current.material = createFilamentMaterial('filamentMat', filament, e.scene);
               }
+              setSceneReady(true);
             }}
           >
             <arcRotateCamera
@@ -127,7 +236,6 @@ export function Viewport({ modelSpec }: ViewportProps) {
             />
             <hemisphericLight name="light1" intensity={0.7} direction={new Vector3(0, 1, 0)} />
             <directionalLight name="light2" intensity={1.5} direction={new Vector3(-1, -2, -1)} />
-
             <mesh name="csg-mesh" ref={meshRef}>
             </mesh>
           </Scene>
