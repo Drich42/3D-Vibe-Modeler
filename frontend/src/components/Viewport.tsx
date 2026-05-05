@@ -20,6 +20,7 @@ interface ViewportProps {
 export function Viewport({ modelSpec }: ViewportProps) {
   const sceneRef = useRef<BabylonScene | null>(null);
   const meshRef = useRef<Mesh | null>(null);
+  const [sceneReady, setSceneReady] = useState(false);
   const [filament, setFilament] = useState<FilamentType>('matte-pla');
 
   const handleExport = () => {
@@ -29,7 +30,7 @@ export function Viewport({ modelSpec }: ViewportProps) {
   };
 
   useEffect(() => {
-    if (!modelSpec || !meshRef.current || !sceneRef.current) return;
+    if (!modelSpec || !meshRef.current || !sceneRef.current || !sceneReady) return;
 
     const mesh = meshRef.current;
     const scene = sceneRef.current;
@@ -58,9 +59,9 @@ export function Viewport({ modelSpec }: ViewportProps) {
       scaleUp.setEasingFunction(ease);
 
       if (mesh.getTotalVertices() === 0) {
-        // Initial render: no vertices yet. Apply immediately and just pop in.
+        // Initial render: apply immediately without animation to avoid scale timing bugs
         vertexData.applyToMesh(mesh, true);
-        scene.beginDirectAnimation(mesh, [scaleUp], 0, 25, false, 1);
+        mesh.scaling = new Vector3(1, 1, 1);
       } else {
         // Subsequent render: pop out, apply, pop in
         scene.beginDirectAnimation(mesh, [scaleDown], 0, 15, false, 1, () => {
@@ -72,7 +73,7 @@ export function Viewport({ modelSpec }: ViewportProps) {
     } catch (e) {
       console.error('Failed to generate CSG geometry:', e);
     }
-  }, [modelSpec]);
+  }, [modelSpec, sceneReady]);
 
   // Update material when filament type changes
   useEffect(() => {
@@ -119,6 +120,7 @@ export function Viewport({ modelSpec }: ViewportProps) {
               if (meshRef.current) {
                 meshRef.current.material = createFilamentMaterial('filamentMat', filament, e.scene);
               }
+              setSceneReady(true);
             }}
           >
             <arcRotateCamera
