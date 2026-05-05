@@ -2,7 +2,7 @@ import { CADModelSpec } from '../types/cad';
 
 export function parsePromptToJSON(prompt: string): CADModelSpec {
   const lowerPrompt = prompt.toLowerCase();
-  
+
   const spec: CADModelSpec = {
     version: '1.0',
     shapes: [{

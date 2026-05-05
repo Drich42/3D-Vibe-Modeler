@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { Viewport } from '@/components/Viewport';
 import { PromptInput } from '@/components/PromptInput';
 import { ImageUploader } from '@/components/ImageUploader';
-import { CADModelSpec } from '@/types/cad';
 import { useToast } from '@/hooks/use-toast';
+import { useCADStore } from '@/store/useCADStore';
+import { Button } from '@/components/ui/button';
+import { Undo2, Redo2 } from 'lucide-react';
 
 export default function Home() {
-  const [modelSpec, setModelSpec] = useState<CADModelSpec | null>(null);
+  const { modelSpec, pastSpecs, futureSpecs, setSpec, undo, redo, clear } = useCADStore();
   const [isExtracting, setIsExtracting] = useState(false);
   const { toast } = useToast();
 
@@ -29,29 +31,26 @@ export default function Home() {
         throw new Error(data.error || 'Failed to extract contour');
       }
 
-      // Append or create a new model spec with the extruded SVG
-      setModelSpec((prevSpec) => {
-        const newShape = {
-          id: `extrusion-${Date.now()}`,
-          type: 'extrusion' as const,
-          path: data.path,
-          depth: 10, // Default 10mm extrusion
-          position: [0, 0, 0] as [number, number, number],
-          operation: 'add' as const,
-        };
+      const newShape = {
+        id: `extrusion-${Date.now()}`,
+        type: 'extrusion' as const,
+        path: data.path,
+        depth: 10, // Default 10mm extrusion
+        position: [0, 0, 0] as [number, number, number],
+        operation: 'add' as const,
+      };
 
-        if (prevSpec) {
-          return {
-            ...prevSpec,
-            shapes: [...prevSpec.shapes, newShape],
-          };
-        } else {
-          return {
-            version: '1.0',
-            shapes: [newShape],
-          };
-        }
-      });
+      if (modelSpec) {
+        setSpec({
+          ...modelSpec,
+          shapes: [...modelSpec.shapes, newShape],
+        });
+      } else {
+        setSpec({
+          version: '1.0',
+          shapes: [newShape],
+        });
+      }
 
       toast({
         title: "Contour Extracted!",
@@ -78,8 +77,19 @@ export default function Home() {
             Text-to-Primitive modeling using an intermediate JSON specification.
           </p>
         </div>
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={undo} disabled={pastSpecs.length === 0} title="Undo">
+              <Undo2 className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={redo} disabled={futureSpecs.length === 0} title="Redo">
+              <Redo2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-4">
-          <PromptInput onGenerate={(spec) => setModelSpec(spec)} onClear={() => setModelSpec(null)} currentSpec={modelSpec} />
+          <PromptInput onGenerate={(spec) => setSpec(spec)} onClear={clear} currentSpec={modelSpec} />
           <div className="relative flex items-center py-2">
             <div className="flex-grow border-t border-muted"></div>
             <span className="flex-shrink-0 mx-4 text-muted-foreground text-sm">OR</span>
