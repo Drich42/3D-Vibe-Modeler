@@ -1,6 +1,6 @@
 export type Operation = 'add' | 'subtract';
 
-export type ShapeType = 'cube' | 'sphere' | 'cylinder';
+export type ShapeType = 'cube' | 'sphere' | 'cylinder' | 'extrusion';
 
 export interface BaseShape {
   id: string;
@@ -26,7 +26,13 @@ export interface CylinderShape extends BaseShape {
   height: number;
 }
 
-export type Shape = CubeShape | SphereShape | CylinderShape;
+export interface ExtrusionShape extends BaseShape {
+  type: 'extrusion';
+  path: string; // SVG path string
+  depth: number;
+}
+
+export type Shape = CubeShape | SphereShape | CylinderShape | ExtrusionShape;
 
 export interface CADModelSpec {
   version: string;

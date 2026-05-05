@@ -1,10 +1,13 @@
 import type { CADModelSpec } from '../types/cad';
 import modeling from '@jscad/modeling';
+// @ts-ignore
+import svgDeserializer from '@jscad/svg-deserializer';
 
-const { booleans, primitives, transforms } = modeling;
+const { booleans, primitives, transforms, extrusions } = modeling;
 const { union, subtract } = booleans;
 const { cuboid, sphere, cylinder } = primitives;
 const { translate, rotate } = transforms;
+const { extrudeLinear } = extrusions;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function generateGeometry(spec: CADModelSpec): any {
@@ -30,6 +33,24 @@ export function generateGeometry(spec: CADModelSpec): any {
       case 'cylinder':
         geom = cylinder({ radius: shape.radius, height: shape.height });
         break;
+      case 'extrusion': {
+        const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><path d="${shape.path}" /></svg>`;
+        const parsed = svgDeserializer.deserialize({ filename: 'temp.svg', output: 'geometry' }, svgString);
+        // The deserializer returns an array of 2D paths/geometries.
+        if (parsed && parsed.length > 0) {
+          // Extrude all paths
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const extrudedPieces = parsed.map((p: any) => extrudeLinear({ height: shape.depth }, p));
+          if (extrudedPieces.length === 1) {
+            geom = extrudedPieces[0];
+          } else {
+            geom = union(...extrudedPieces);
+          }
+        } else {
+           throw new Error('Failed to parse SVG path into geometry');
+        }
+        break;
+      }
       default:
         throw new Error(`Unsupported shape type`);
     }

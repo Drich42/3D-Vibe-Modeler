@@ -6,7 +6,7 @@ import { zodResponseFormat } from 'openai/helpers/zod';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || 'dummy_key_for_build' });
 
 const OperationSchema = z.enum(['add', 'subtract']);
-const ShapeTypeSchema = z.enum(['cube', 'sphere', 'cylinder']);
+const ShapeTypeSchema = z.enum(['cube', 'sphere', 'cylinder', 'extrusion']);
 
 const BaseShapeSchema = z.object({
   id: z.string(),
@@ -31,10 +31,17 @@ const CylinderShapeSchema = BaseShapeSchema.extend({
   height: z.number(),
 });
 
+const ExtrusionShapeSchema = BaseShapeSchema.extend({
+  type: z.literal('extrusion'),
+  path: z.string(),
+  depth: z.number(),
+});
+
 const ShapeSchema = z.discriminatedUnion('type', [
   CubeShapeSchema,
   SphereShapeSchema,
   CylinderShapeSchema,
+  ExtrusionShapeSchema,
 ]);
 
 const CADModelSpecSchema = z.object({
@@ -55,7 +62,7 @@ export async function POST(req: NextRequest) {
         role: 'system',
         content: `You are an expert CAD engineer. Your goal is to translate user natural language requests into a strict JSON representation of 3D geometry using Constructive Solid Geometry (CSG).
 The JSON MUST match the provided schema exactly.
-The supported shapes are 'cube', 'sphere', and 'cylinder'.
+The supported shapes are 'cube', 'sphere', 'cylinder', and 'extrusion'.
 Operations can be 'add' or 'subtract'. The very first shape MUST be 'add'.
 Rotations are in degrees [x, y, z].
 Positions are in millimeters [x, y, z].
