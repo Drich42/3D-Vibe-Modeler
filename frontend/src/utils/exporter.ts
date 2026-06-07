@@ -1,5 +1,5 @@
 import { Scene } from '@babylonjs/core';
-import { STLExport } from '@babylonjs/serializers/STL/stlSerializer';
+import { STLExport } from '@babylonjs/serializers/stl/stlSerializer';
 
 export function exportSceneToSTL(scene: Scene, filename: string = 'my_model.stl') {
   STLExport.CreateSTL(

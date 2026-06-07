@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Preference Sorter</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #eee;
+            text-align: center;
+        }
+        h1 { margin-bottom: 10px; }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .image-container {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+        .image-pair {
+            max-width: 45%;
+        }
+        img {
+            max-width: 100%;
+            max-height: 500px;
+            border: 4px solid #444;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        img:hover {
+            transform: scale(1.02);
+        }
+        .selected {
+            border-color: #4ade80;
+            box-shadow: 0 0 30px #4ade80;
+        }
+        .results {
+            margin-top: 40px;
+        }
+        .ranked-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .rank-item {
+            text-align: center;
+        }
+        .rank-item img {
+            max-height: 180px;
+            border: 3px solid #666;
+        }
+        .progress {
+            font-size: 18px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🖼️ Image Preference Sorter</h1>
+    <p>Pick your favorite between two images. We'll sort them by your taste.</p>
+
+    <div class="controls">
+        <input type="file" id="dirInput" webkitdirectory directory multiple accept="image/*" style="display: none;">
+        <button onclick="document.getElementById('dirInput').click()">📁 Load Image Folder</button>
+        <button onclick="startSorting()" id="startBtn" disabled>🚀 Start Sorting</button>
+        <button onclick="showResults()" id="resultsBtn" disabled>📊 Show Results</button>
+    </div>
+
+    <div id="status" class="progress"></div>
+
+    <div class="image-container" id="pairContainer" style="display: none;">
+        <div class="image-pair">
+            <img id="img1" onclick="choose(0)">
+            <p id="label1">Image A</p>
+        </div>
+        <div class="image-pair">
+            <img id="img2" onclick="choose(1)">
+            <p id="label2">Image B</p>
+        </div>
+    </div>
+
+    <div class="controls" id="choiceControls" style="display: none;">
+        <button onclick="choose(0)">👍 Prefer Left</button>
+        <button onclick="skip()">⏭️ Skip / Tie</button>
+        <button onclick="choose(1)">👍 Prefer Right</button>
+    </div>
+
+    <div id="resultsPanel" class="results" style="display: none;">
+        <h2>Your Ranked Preferences</h2>
+        <div id="rankedList" class="ranked-list"></div>
+        <button onclick="resetAll()">Start Over</button>
+    </div>
+
+    <script>
+        let images = [];
+        let scores = new Map();
+        let comparisons = 0;
+        let currentPair = [];
+        let isTransitioning = false;
+
+        const dirInput = document.getElementById('dirInput');
+        const startBtn = document.getElementById('startBtn');
+        const resultsBtn = document.getElementById('resultsBtn');
+        const pairContainer = document.getElementById('pairContainer');
+        const choiceControls = document.getElementById('choiceControls');
+        const statusEl = document.getElementById('status');
+
+        dirInput.addEventListener('change', (e) => {
+            images = [];
+            scores.clear();
+            const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+
+            files.forEach(file => {
+                const url = URL.createObjectURL(file);
+                images.push({ name: file.name, url, file });
+                scores.set(file.name, 0);
+            });
+
+            statusEl.textContent = `Loaded ${images.length} images. Ready to sort!`;
+            startBtn.disabled = images.length < 2;
+        });
+
+        function startSorting() {
+            if (images.length < 2) return;
+            comparisons = 0;
+            pairContainer.style.display = 'flex';
+            choiceControls.style.display = 'block';
+            document.getElementById('resultsPanel').style.display = 'none';
+            resultsBtn.disabled = false;
+            pickRandomPair();
+        }
+
+        function pickRandomPair() {
+            if (images.length < 2) return;
+
+            // Shuffle a bit for variety
+            const shuffled = [...images].sort(() => Math.random() - 0.5);
+            currentPair = [shuffled[0], shuffled[1]];
+
+            document.getElementById('img1').src = currentPair[0].url;
+            document.getElementById('img2').src = currentPair[1].url;
+            document.getElementById('label1').textContent = currentPair[0].name;
+            document.getElementById('label2').textContent = currentPair[1].name;
+
+            // Clear previous selection
+            document.getElementById('img1').classList.remove('selected');
+            document.getElementById('img2').classList.remove('selected');
+
+            statusEl.textContent = `Comparison ${comparisons + 1} • ${images.length} images`;
+        }
+
+        function choose(winnerIndex) {
+            if (isTransitioning) return;
+            isTransitioning = true;
+
+            const winner = currentPair[winnerIndex];
+            const loser = currentPair[1 - winnerIndex];
+
+            scores.set(winner.name, (scores.get(winner.name) || 0) + 1);
+
+            comparisons++;
+            statusEl.textContent = `Comparison ${comparisons} • ${images.length} images`;
+
+            // Simple visual feedback
+            document.getElementById(`img${winnerIndex + 1}`).classList.add('selected');
+
+            setTimeout(() => {
+                isTransitioning = false;
+                pickRandomPair();
+            }, 400);
+        }
+
+        function skip() {
+            if (isTransitioning) return;
+            pickRandomPair();
+        }
+
+        function showResults() {
+            pairContainer.style.display = 'none';
+            choiceControls.style.display = 'none';
+
+            const sorted = [...images].sort((a, b) => {
+                const scoreA = scores.get(a.name) || 0;
+                const scoreB = scores.get(b.name) || 0;
+                return scoreB - scoreA; // descending
+            });
+
+            const rankedList = document.getElementById('rankedList');
+            rankedList.innerHTML = '';
+
+            sorted.forEach((img, index) => {
+                const div = document.createElement('div');
+                div.className = 'rank-item';
+                div.innerHTML = `
+                    <div style="font-size: 28px; font-weight: bold; color: #4ade80;">#${index + 1}</div>
+                    <img src="${img.url}" alt="${img.name}">
+                    <p>${img.name}</p>
+                    <small>Score: ${scores.get(img.name) || 0} wins</small>
+                `;
+                rankedList.appendChild(div);
+            });
+
+            document.getElementById('resultsPanel').style.display = 'block';
+        }
+
+        function resetAll() {
+            images = [];
+            scores.clear();
+            comparisons = 0;
+            dirInput.value = '';
+            pairContainer.style.display = 'none';
+            choiceControls.style.display = 'none';
+            document.getElementById('resultsPanel').style.display = 'none';
+            statusEl.textContent = '';
+            startBtn.disabled = true;
+            resultsBtn.disabled = true;
+        }
+
+        // Keyboard support
+        document.addEventListener('keydown', (e) => {
+            if (pairContainer.style.display !== 'flex') return;
+            if (e.key === 'ArrowLeft') choose(0);
+            if (e.key === 'ArrowRight') choose(1);
+            if (e.key === ' ' || e.key === 'Enter') skip();
+        });
+    </script>
+</body>
+</html>
