@@ -140,7 +140,7 @@
 
         // Setup Siamese Network
         function setupModels() {
-            const embeddingDim = 1000; // MobileNet v2 embedding size
+            const embeddingDim = 1280; // MobileNet v2 embedding size
 
             // Define custom Subtract Layer for tfjs (since tf.layers.subtract is not available natively in tfjs)
             class SubtractLayer extends tf.layers.Layer {
@@ -190,15 +190,26 @@
         // Load MobileNet immediately
         (async function init() {
             statusEl.textContent = "Loading neural network...";
-            featureExtractor = await mobilenet.load({version: 2, alpha: 1.0});
-            setupModels();
-            statusEl.textContent = "Neural network ready! Load a folder.";
+            try {
+                featureExtractor = await mobilenet.load({version: 2, alpha: 1.0});
+                setupModels();
+                statusEl.textContent = "Neural network ready! Load a folder.";
+            } catch (e) {
+                console.warn("WebGL initialization failed, falling back to CPU", e);
+                statusEl.textContent = "Falling back to CPU backend...";
+                await tf.setBackend('cpu');
+                featureExtractor = await mobilenet.load({version: 2, alpha: 1.0});
+                setupModels();
+                statusEl.textContent = "Neural network ready (CPU)! Load a folder.";
+            }
         })();
 
         async function extractEmbedding(imgElement) {
             // MobileNet infers a 1x1000 tensor for classification. We can use infer() for raw 1024 embedding
             const embed = featureExtractor.infer(imgElement, true);
-            return embed.squeeze(); // 1D tensor
+            const squeezed = embed.squeeze(); // 1D tensor
+            embed.dispose();
+            return squeezed;
         }
 
         dirInput.addEventListener('change', async (e) => {
@@ -226,14 +237,24 @@
 
                 const img = new Image();
                 img.src = url;
-                await new Promise(res => img.onload = res);
-                hiddenContainer.appendChild(img);
 
-                const embed = await extractEmbedding(img);
+                try {
+                    await new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                    });
+                    hiddenContainer.appendChild(img);
 
-                images.push({ name: file.name, url, file });
-                scores.set(file.name, 0);
-                embeddings.set(file.name, embed);
+                    const embed = await extractEmbedding(img);
+
+                    images.push({ name: file.name, url, file });
+                    scores.set(file.name, 0);
+                    embeddings.set(file.name, embed);
+                } catch (err) {
+                    console.warn(`Failed to load or process image: ${file.name}`, err);
+                }
+                // Yield to GPU to prevent shader timeout
+                await tf.nextFrame();
             }
 
             document.body.removeChild(hiddenContainer);
@@ -251,10 +272,14 @@
             const ys = [];
 
             for (const h of historyData) {
-                xsA.push(embeddings.get(h.a));
-                xsB.push(embeddings.get(h.b));
-                ys.push([h.winner === 0 ? 1 : 0]); // 1 if A won, 0 if B won
+                if (embeddings.has(h.a) && embeddings.has(h.b)) {
+                    xsA.push(embeddings.get(h.a));
+                    xsB.push(embeddings.get(h.b));
+                    ys.push([h.winner === 0 ? 1 : 0]); // 1 if A won, 0 if B won
+                }
             }
+
+            if (xsA.length === 0) return; // No valid history for current images
 
             const tensorA = tf.stack(xsA);
             const tensorB = tf.stack(xsB);
@@ -270,23 +295,35 @@
             tensorA.dispose();
             tensorB.dispose();
             tensorY.dispose();
-
-            predictAllScores();
         }
 
         let predictedScores = new Map();
 
-        function predictAllScores() {
-            tf.tidy(() => {
-                images.forEach(img => {
-                    const embed = embeddings.get(img.name);
-                    const score = scoringModel.predict(embed.expandDims(0)).dataSync()[0];
-                    predictedScores.set(img.name, score);
-                });
-            });
+        async function predictAllScores() {
+            // Batch all embeddings into a single tensor
+            const names = [];
+            const tensors = [];
+            for (const img of images) {
+                if (embeddings.has(img.name)) {
+                    names.push(img.name);
+                    tensors.push(embeddings.get(img.name));
+                }
+            }
+            if (tensors.length === 0) return;
+
+            const batch = tf.stack(tensors);
+            const scoresTensor = scoringModel.predict(batch);
+            const scoreData = await scoresTensor.data(); // async, doesn't block UI
+
+            for (let i = 0; i < names.length; i++) {
+                predictedScores.set(names[i], scoreData[i]);
+            }
+
+            batch.dispose();
+            scoresTensor.dispose();
         }
 
-        function startSorting() {
+        async function startSorting() {
             if (images.length < 2) return;
             comparisons = historyData.length;
             pairContainer.style.display = 'flex';
@@ -296,7 +333,7 @@
 
             // Ensure predictions exist
             if (predictedScores.size === 0 && images.length > 0) {
-                predictAllScores();
+                await predictAllScores();
             }
             pickRandomPair();
         }
@@ -369,7 +406,8 @@
             document.getElementById(`img${winnerIndex + 1}`).classList.add('selected');
 
             // Train asynchronously
-            trainModel().then(() => {
+            trainModel().then(async () => {
+                await predictAllScores();
                 setTimeout(() => {
                     isTransitioning = false;
                     pickRandomPair();
