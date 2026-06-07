@@ -193,6 +193,13 @@
             try {
                 featureExtractor = await mobilenet.load({version: 2, alpha: 1.0});
                 setupModels();
+
+                // Force shader compilation to catch WebGL errors early
+                const dummy = tf.zeros([224, 224, 3]);
+                const dummyEmbed = featureExtractor.infer(dummy, true);
+                dummy.dispose();
+                dummyEmbed.dispose();
+
                 statusEl.textContent = "Neural network ready! Load a folder.";
             } catch (e) {
                 console.warn("WebGL initialization failed, falling back to CPU", e);
